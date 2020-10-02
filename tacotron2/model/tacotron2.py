@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 from torch import Tensor
 from typing import Optional
@@ -16,3 +15,11 @@ class Tacotron2(nn.Module):
         output = self.decoder(output)
 
         return output
+
+
+class PostNet(nn.Module):
+    def __init__(self):
+        super(PostNet, self).__init__()
+
+    def forward(self):
+        pass
