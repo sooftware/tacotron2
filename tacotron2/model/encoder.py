@@ -64,11 +64,10 @@ class Encoder(nn.Module):
 
     def forward(
             self,
-            inputs: Tensor,                             # B x T x D
+            inputs: Tensor,                             # B x T
             input_lengths: Optional[Tensor] = None      # B,
     ) -> Tensor:
         inputs = self.embedding(inputs)
-        inputs = inputs.transpose(1, 2)
 
         if input_lengths is not None:
             output = nn.utils.rnn.pack_padded_sequence(inputs, input_lengths, batch_first=True)

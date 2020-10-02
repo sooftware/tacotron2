@@ -15,7 +15,7 @@ class Tacotron2(nn.Module):
         encoder_outputs = self.encoder(inputs, input_lengths)
         decoder_outputs = self.decoder(encoder_outputs)
 
-        output = self.postnet(decoder_outputs["feat_outputs"])
-        output += decoder_outputs["feat_outputs"]
+        postnet_outputs = self.postnet(decoder_outputs["feat_outputs"])
+        decoder_outputs["feat_outputs"] += postnet_outputs
 
-        return output
+        return decoder_outputs

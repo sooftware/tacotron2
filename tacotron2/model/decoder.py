@@ -4,26 +4,49 @@ import torch.nn.functional as F
 from torch import Tensor
 from tacotron2.model.attention import LocationSensitiveAttention
 from tacotron2.model.sublayers import Linear, PreNet
-from typing import Optional
+from typing import Optional, Dict
 
 
 class Decoder(nn.Module):
     """
     The decoder is an autoregressive recurrent neural network which predicts
     a mel spectrogram from the encoded input sequence one frame at a time.
+
+    Args:
+        n_mels: number of mel filters
+        n_frames_per_step: number of frames per step. currently support just 1
+        prenet_dim: dimension of prenet
+        decoder_lstm_dim: dimension of decoder lstm network
+        attention_lstm_dim: dimension of attention lstm network
+        embedding_dim: dimension of embedding network
+        attn_dim: dimension of attention layer
+        location_conv_filter_size: size of location convolution filter
+        location_conv_kernel_size: size of location convolution kernel
+        prenet_dropout_p: dropout probability of prenet
+        attn_dropout_p: dropout probability of attention network
+        decoder_dropout_p: dropout probability of decoder network
+        max_length: max length when inference
+        stop_threshold: stop threshold
+
+    Inputs:
+        - **encoder_outputs**: tensor containing the encoded features of the input character sequences
+        - **inputs**: target mel-spectrogram for training
+
+    Returns:
+        - **output**: dictionary contains feat_outputs, stop_outputs, alignment_energies
     """
     def __init__(
             self,
             n_mels: int = 80,
             n_frames_per_step: int = 1,
             prenet_dim: int = 256,
-            dropout_p: float = 0.5,
             decoder_lstm_dim: int = 1024,
             attention_lstm_dim: int = 1024,
             embedding_dim: int = 512,
             attn_dim: int = 128,
             location_conv_filter_size: int = 32,
-            location_conv_kenel_size: int = 31,
+            location_conv_kernel_size: int = 31,
+            prenet_dropout_p: float = 0.5,
             attn_dropout_p: float = 0.1,
             decoder_dropout_p: float = 0.1,
             max_length: int = 1000,
@@ -38,7 +61,7 @@ class Decoder(nn.Module):
         self.embedding_dim = embedding_dim
         self.attn_dropout_p = attn_dropout_p
         self.decoder_dropout_p = decoder_dropout_p
-        self.stop_threshold = 0.5
+        self.stop_threshold = stop_threshold
 
         self.context_vector = None
         self.attention_output = None
@@ -48,7 +71,7 @@ class Decoder(nn.Module):
         self.decoder_output = None
         self.decoder_hidden = None
 
-        self.prenet = PreNet(self.n_mels * self.n_frames_per_step, prenet_dim, dropout_p)
+        self.prenet = PreNet(self.n_mels * self.n_frames_per_step, prenet_dim, prenet_dropout_p)
         self.attention_lstm = nn.LSTMCell(
             input_size=prenet_dim + embedding_dim,
             hidden_size=attention_lstm_dim,
@@ -60,7 +83,7 @@ class Decoder(nn.Module):
             bias=True
         )
         self.attention = LocationSensitiveAttention(
-            decoder_lstm_dim, embedding_dim, attn_dim, location_conv_filter_size, location_conv_kenel_size
+            decoder_lstm_dim, embedding_dim, attn_dim, location_conv_filter_size, location_conv_kernel_size
         )
         self.feat_linear_projection = Linear(decoder_lstm_dim + embedding_dim, n_mels * n_frames_per_step)
         self.stop_linear_projection = Linear(decoder_lstm_dim + embedding_dim, 1)
@@ -120,7 +143,11 @@ class Decoder(nn.Module):
 
         return feat_output, stop_output, self.alignment_energy
 
-    def forward(self, inputs, encoder_outputs):
+    def forward(
+            self,
+            encoder_outputs: Tensor,
+            inputs: Optional[Tensor] = None
+    ) -> Dict[Tensor, Tensor, Tensor]:
         """
         Args:
             inputs: (batch, seq_length, n_mels)
@@ -167,7 +194,7 @@ class Decoder(nn.Module):
             encoder_outputs: Tensor = None
     ):
         assert encoder_outputs is not None
-        train = True
+
         batch_size = encoder_outputs.size(0)
         seq_length = encoder_outputs.size(1)
 
@@ -180,6 +207,7 @@ class Decoder(nn.Module):
             go_frame = encoder_outputs.new_zeros(batch_size, self.n_mels * self.n_frames_per_step)
             inputs = inputs.view(batch_size, int(seq_length / self.n_frames_per_step), -1)
             inputs = torch.cat((go_frame, inputs), dim=1)
+            train = True
 
             max_length = inputs.size(1) - 1
 

@@ -42,7 +42,13 @@ class LocationSensitiveAttention(nn.Module):
         self.align_proj = Linear(attn_dim, 1, bias=True)
         self.bias = nn.Parameter(torch.rand(attn_dim).uniform_(-0.1, 0.1))
 
-        self.location_conv = nn.Conv1d(2, location_conv_filter_size, kernel_size=location_conv_kernel_size, bias=False)
+        self.location_conv = nn.Conv1d(
+            in_channels=2,
+            out_channels=location_conv_filter_size,
+            kernel_size=location_conv_kernel_size,
+            padding=int((location_conv_kernel_size - 1) / 2),
+            bias=False
+        )
         self.location_proj = Linear(location_conv_filter_size, attn_dim, bias=False)
 
     def forward(
@@ -72,15 +78,14 @@ class LocationSensitiveAttention(nn.Module):
             last_alignment_energy: Tensor
     ) -> Tensor:
         batch_size = query.size(0)
-        hidden_dim = query.size(2)
 
-        last_alignment_energy = self.location_conv(last_alignment_energy)
+        last_alignment_energy = self.location_conv(last_alignment_energy.transpose(1, 2))
         last_alignment_energy = last_alignment_energy.transpose(1, 2)
         last_alignment_energy = self.location_proj(last_alignment_energy)
 
         alignment_energy = self.align_proj(torch.tanh(
-            self.query_proj(query.reshape(-1, hidden_dim)).view(batch_size, -1, self.attn_dim)
-            + self.value_proj(value.reshape(-1, hidden_dim)).view(batch_size, -1, self.attn_dim)
+            self.query_proj(query.reshape(-1, query.size(2))).view(batch_size, -1, self.attn_dim)
+            + self.value_proj(value.reshape(-1, value.size(2))).view(batch_size, -1, self.attn_dim)
             + last_alignment_energy
             + self.bias
         )).squeeze(-1)
