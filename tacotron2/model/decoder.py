@@ -102,10 +102,10 @@ class Decoder(nn.Module):
         self.context_vector = encoder_outputs.new_zeros(batch_size, self.embedding_dim)
 
     def parse_decoder_outputs(self, feat_outputs, stop_outputs, alignment_energies):
-        stop_outputs = torch.stack(stop_outputs).t().contiguous()
-        alignment_energies = torch.stack(alignment_energies).t()
+        stop_outputs = torch.stack(stop_outputs).transpose(0, 1).contiguous()
+        alignment_energies = torch.stack(alignment_energies).transpose(0, 1)
 
-        feat_outputs = torch.stack(feat_outputs).t().contiguous()
+        feat_outputs = torch.stack(feat_outputs).transpose(0, 1).contiguous()
         feat_outputs = feat_outputs.view(feat_outputs.size(0), -1, self.n_mels)
         feat_outputs = feat_outputs.transpose(1, 2)
 
@@ -116,15 +116,15 @@ class Decoder(nn.Module):
         }
 
     def forward_step(self, input_var: Tensor, encoder_outputs: Tensor):
-        input_var = torch.cat((input_var, self.context_vector), dim=-1)
+        input_var = torch.cat((input_var.squeeze(1), self.context_vector), dim=-1)
 
         self.attention_output, self.attention_hidden = self.attention_lstm(
             input_var, (self.attention_output, self.attention_hidden)
         )
-        self.attention_output = F.dropout(self.attention_output, self.attention_dropout_p)
+        self.attention_output = F.dropout(self.attention_output, self.attn_dropout_p)
 
         concated_alignment_energy = torch.cat(
-            (self.alignment_energy.unsqueeze(1), self.alignment_energy_cum.unsqueeze(1)), dim=-1
+            (self.alignment_energy.unsqueeze(1), self.alignment_energy_cum.unsqueeze(1)), dim=1
         )
         self.context_vector, self.alignment_energy = self.attention(
             self.attention_output, encoder_outputs, concated_alignment_energy
@@ -147,7 +147,7 @@ class Decoder(nn.Module):
             self,
             encoder_outputs: Tensor,
             inputs: Optional[Tensor] = None
-    ) -> Dict[Tensor, Tensor, Tensor]:
+    ):
         """
         Args:
             inputs: (batch, seq_length, n_mels)
@@ -164,7 +164,7 @@ class Decoder(nn.Module):
             inputs = self.prenet(inputs)  # B x T x 256
 
             for di in range(max_length):
-                feat_output, stop_output, alignment_energy = self.forrward_step(inputs[di])
+                feat_output, stop_output, alignment_energy = self.forward_step(inputs[:, di, :].unsqueeze(1), encoder_outputs)
                 feat_outputs.append(feat_output)
                 stop_outputs.append(stop_output)
                 alignment_energies.append(alignment_energy)
@@ -174,7 +174,7 @@ class Decoder(nn.Module):
 
             for di in range(max_length):
                 input_var = self.prenet(input_var)
-                feat_output, stop_output, alignment_energy = self.forrward_step(input_var)
+                feat_output, stop_output, alignment_energy = self.forward_step(input_var, encoder_outputs)
                 feat_outputs.append(feat_output)
                 stop_outputs.append(stop_output)
                 alignment_energies.append(alignment_energy)
@@ -196,7 +196,6 @@ class Decoder(nn.Module):
         assert encoder_outputs is not None
 
         batch_size = encoder_outputs.size(0)
-        seq_length = encoder_outputs.size(1)
 
         if input is None:  # inference
             inputs = encoder_outputs.new_zeros(batch_size, self.n_mels * self.n_frames_per_step)
@@ -204,8 +203,9 @@ class Decoder(nn.Module):
             train = False
 
         else:  # training
-            go_frame = encoder_outputs.new_zeros(batch_size, self.n_mels * self.n_frames_per_step)
-            inputs = inputs.view(batch_size, int(seq_length / self.n_frames_per_step), -1)
+            go_frame = encoder_outputs.new_zeros(batch_size, self.n_mels * self.n_frames_per_step).unsqueeze(1)
+            inputs = inputs.view(batch_size, int(inputs.size(1) / self.n_frames_per_step), -1)
+
             inputs = torch.cat((go_frame, inputs), dim=1)
             train = True
 

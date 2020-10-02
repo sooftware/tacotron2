@@ -77,6 +77,6 @@ class Encoder(nn.Module):
 
         else:
             self.lstm.flatten_parameters()
-            output = self.lstm(inputs)
+            output, _ = self.lstm(inputs)
 
         return output

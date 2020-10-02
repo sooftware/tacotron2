@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from tacotron2.model.sublayers import Linear
-from typing import Tuple
+from typing import Tuple, Optional
 
 
 class LocationSensitiveAttention(nn.Module):
@@ -57,12 +57,6 @@ class LocationSensitiveAttention(nn.Module):
             value: Tensor,
             last_alignment_energy: Tensor
     ) -> Tuple[Tensor, Tensor]:
-        batch_size = query.size(0)
-        seq_length = value.size(1)
-
-        if last_alignment_energy is None:
-            last_alignment_energy = value.new_zeros(batch_size, seq_length).unsqueeze(1)
-
         alignment_energy = self.get_alignment_energy(query, value, last_alignment_energy)
         alignment_energy = F.softmax(alignment_energy, dim=-1)
 
@@ -78,8 +72,9 @@ class LocationSensitiveAttention(nn.Module):
             last_alignment_energy: Tensor
     ) -> Tensor:
         batch_size = query.size(0)
+        query = query.unsqueeze(1)
 
-        last_alignment_energy = self.location_conv(last_alignment_energy.transpose(1, 2))
+        last_alignment_energy = self.location_conv(last_alignment_energy)
         last_alignment_energy = last_alignment_energy.transpose(1, 2)
         last_alignment_energy = self.location_proj(last_alignment_energy)
 

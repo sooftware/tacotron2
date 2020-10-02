@@ -13,5 +13,4 @@ align = torch.FloatTensor(batch_size, seq_length, align_dim).uniform_(-0.01, 0.0
 
 attention = LocationSensitiveAttention()
 output = attention(query, value, align)
-
 print(output)
