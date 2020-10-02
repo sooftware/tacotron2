@@ -58,8 +58,10 @@ class PostNet(nn.Module):
             activation='tanh'
         ))
 
-    def forward(self, inputs):
-        return self.conv_layers(inputs)
+    def forward(self, x: Tensor):
+        for conv_layer in self.conv_layers:
+            x = conv_layer(x)
+        return x
 
 
 class ConvBlock(nn.Module):

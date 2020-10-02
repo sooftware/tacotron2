@@ -11,9 +11,9 @@ class Tacotron2(nn.Module):
         self.decoder = decoder
         self.postnet = postnet
 
-    def forward(self, inputs: Tensor, input_lengths: Optional[Tensor] = None):
+    def forward(self, inputs: Tensor, targets: Optional[Tensor] = None, input_lengths: Optional[Tensor] = None):
         encoder_outputs = self.encoder(inputs, input_lengths)
-        decoder_outputs = self.decoder(encoder_outputs)
+        decoder_outputs = self.decoder(encoder_outputs, targets)
 
         postnet_outputs = self.postnet(decoder_outputs["feat_outputs"])
         decoder_outputs["feat_outputs"] += postnet_outputs
