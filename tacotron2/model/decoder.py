@@ -3,24 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from tacotron2.model.attention import LocationSensitiveAttention
-from tacotron2.model.modules import Linear
+from tacotron2.model.sublayers import Linear, PreNet
 from typing import Optional
-
-
-class PreNet(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, dropout_p: float) -> None:
-        super(PreNet, self).__init__()
-        self.fully_connected_layers = nn.Sequential(
-            Linear(input_dim, output_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_p),
-            Linear(output_dim, output_dim),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_p)
-        )
-
-    def forward(self, inputs: Tensor) -> Tensor:
-        return self.fully_connected_layers(inputs)
 
 
 class Decoder(nn.Module):
@@ -42,7 +26,8 @@ class Decoder(nn.Module):
             location_conv_kenel_size: int = 31,
             attn_dropout_p: float = 0.1,
             decoder_dropout_p: float = 0.1,
-            max_length: int = 1000
+            max_length: int = 1000,
+            stop_threshold: float = 0.5
     ):
         super(Decoder, self).__init__()
         self.n_mels = n_mels
@@ -53,6 +38,7 @@ class Decoder(nn.Module):
         self.embedding_dim = embedding_dim
         self.attn_dropout_p = attn_dropout_p
         self.decoder_dropout_p = decoder_dropout_p
+        self.stop_threshold = 0.5
 
         self.context_vector = None
         self.attention_output = None
@@ -144,16 +130,32 @@ class Decoder(nn.Module):
         stop_outputs = list()
         alignment_energies = list()
 
-        inputs, max_length = self.validate_args(inputs, encoder_outputs)
+        inputs, max_length, train = self.validate_args(inputs, encoder_outputs)
         self._init_decoder_states(encoder_outputs)
 
-        inputs = self.prenet(inputs)  # B x T x 256
+        if train:
+            inputs = self.prenet(inputs)  # B x T x 256
 
-        for di in range(max_length):
-            feat_output, stop_output, alignment_energy = self.forrward_step(inputs[di])
-            feat_outputs.append(feat_output)
-            stop_outputs.append(stop_output)
-            alignment_energies.append(alignment_energy)
+            for di in range(max_length):
+                feat_output, stop_output, alignment_energy = self.forrward_step(inputs[di])
+                feat_outputs.append(feat_output)
+                stop_outputs.append(stop_output)
+                alignment_energies.append(alignment_energy)
+
+        else:
+            input_var = inputs
+
+            for di in range(max_length):
+                input_var = self.prenet(input_var)
+                feat_output, stop_output, alignment_energy = self.forrward_step(input_var)
+                feat_outputs.append(feat_output)
+                stop_outputs.append(stop_output)
+                alignment_energies.append(alignment_energy)
+
+                if torch.sigmoid(stop_output.item()) > self.stop_threshold:
+                    break
+
+                input_var = feat_output
 
         output = self.parse_decoder_outputs(feat_outputs, stop_outputs, alignment_energies)
 
@@ -165,12 +167,14 @@ class Decoder(nn.Module):
             encoder_outputs: Tensor = None
     ):
         assert encoder_outputs is not None
+        train = True
         batch_size = encoder_outputs.size(0)
         seq_length = encoder_outputs.size(1)
 
         if input is None:  # inference
             inputs = encoder_outputs.new_zeros(batch_size, self.n_mels * self.n_frames_per_step)
             max_length = self.max_length
+            train = False
 
         else:  # training
             go_frame = encoder_outputs.new_zeros(batch_size, self.n_mels * self.n_frames_per_step)
@@ -179,4 +183,4 @@ class Decoder(nn.Module):
 
             max_length = inputs.size(1) - 1
 
-        return inputs, max_length
+        return inputs, max_length, train

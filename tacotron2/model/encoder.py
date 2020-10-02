@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torch import Tensor
 from typing import Optional
-from tacotron2.model.modules import ConvBlock
+from tacotron2.model.sublayers import ConvBlock
 
 
 class Encoder(nn.Module):
@@ -43,9 +43,15 @@ class Encoder(nn.Module):
     ) -> None:
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.conv = nn.Sequential(
-            *[ConvBlock(embedding_dim, embedding_dim, conv_kernel_size, conv_dropout_p) for _ in range(num_conv_layers)]
-        )
+        self.conv = nn.Sequential(*[
+            ConvBlock(
+                embedding_dim,
+                embedding_dim,
+                kernel_size=conv_kernel_size,
+                padding=int((conv_kernel_size - 1) / 2),
+                dropout_p=conv_dropout_p
+            ) for _ in range(num_conv_layers)
+        ])
         self.lstm = nn.LSTM(
             input_size=embedding_dim,
             hidden_size=encoder_lstm_dim,

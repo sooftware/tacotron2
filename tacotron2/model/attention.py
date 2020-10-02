@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from tacotron2.model.modules import Linear
+from tacotron2.model.sublayers import Linear
 from typing import Tuple
 
 
@@ -42,7 +42,7 @@ class LocationSensitiveAttention(nn.Module):
         self.align_proj = Linear(attn_dim, 1, bias=True)
         self.bias = nn.Parameter(torch.rand(attn_dim).uniform_(-0.1, 0.1))
 
-        self.location_conv = nn.Conv1d(1, location_conv_filter_size, kernel_size=location_conv_kernel_size, bias=False)
+        self.location_conv = nn.Conv1d(2, location_conv_filter_size, kernel_size=location_conv_kernel_size, bias=False)
         self.location_proj = Linear(location_conv_filter_size, attn_dim, bias=False)
 
     def forward(
