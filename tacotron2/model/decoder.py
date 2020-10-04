@@ -38,7 +38,7 @@ class Decoder(nn.Module):
         - **inputs**: target mel-spectrogram for training
 
     Returns:
-        - **output**: dictionary contains feat_outputs, stop_outputs, alignments
+        - **output**: dictionary contains mel_outputs, stop_outputs, alignments
     """
     def __init__(
             self,
@@ -78,7 +78,7 @@ class Decoder(nn.Module):
             location_conv_filter_size=location_conv_filter_size,
             location_conv_kernel_size=location_conv_kernel_size
         )
-        self.feat_generator = Linear(decoder_lstm_dim + embedding_dim, num_mel_bins)
+        self.mel_generator = Linear(decoder_lstm_dim + embedding_dim, num_mel_bins)
         self.stop_generator = Linear(decoder_lstm_dim + embedding_dim, 1)
 
     def _init_decoder_states(self, encoder_outputs: Tensor) -> Dict[str, Any]:
@@ -106,16 +106,16 @@ class Decoder(nn.Module):
             "context": context
         }
 
-    def parse_decoder_outputs(self, feat_outputs: list, stop_outputs: list, alignment: list) -> Dict[str, Tensor]:
+    def parse_decoder_outputs(self, mel_outputs: list, stop_outputs: list, alignment: list) -> Dict[str, Tensor]:
         stop_outputs = torch.stack(stop_outputs).transpose(0, 1).contiguous()
         alignment = torch.stack(alignment).transpose(0, 1)
 
-        feat_outputs = torch.stack(feat_outputs).transpose(0, 1).contiguous()
-        feat_outputs = feat_outputs.view(feat_outputs.size(0), -1, self.num_mel_bins)
-        feat_outputs = feat_outputs.transpose(1, 2)
+        mel_outputs = torch.stack(mel_outputs).transpose(0, 1).contiguous()
+        mel_outputs = mel_outputs.view(mel_outputs.size(0), -1, self.num_mel_bins)
+        mel_outputs = mel_outputs.transpose(1, 2)
 
         return {
-            "feat_outputs": feat_outputs,
+            "mel_outputs": mel_outputs,
             "stop_outputs": stop_outputs,
             "alignments": alignment
         }
@@ -146,11 +146,11 @@ class Decoder(nn.Module):
 
         output = torch.cat((h_list[1], context), dim=-1)
 
-        feat_output = self.feat_generator(output)
+        mel_output = self.mel_generator(output)
         stop_output = self.stop_generator(output)
 
         return {
-            "feat_output": feat_output,
+            "mel_output": mel_output,
             "stop_output": stop_output,
             "alignment": alignment,
             "alignment_cum": alignment_cum,
@@ -165,7 +165,7 @@ class Decoder(nn.Module):
             inputs: Optional[Tensor] = None,
             teacher_forcing_ratio: float = 1.0
     ) -> Dict[str, Tensor]:
-        feat_outputs, stop_outputs, alignments = list(), list(), list()
+        mel_outputs, stop_outputs, alignments = list(), list(), list()
         use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
 
         inputs, max_decoding_step = self.validate_args(encoder_outputs, inputs, teacher_forcing_ratio)
@@ -186,7 +186,7 @@ class Decoder(nn.Module):
                     context=decoder_states["context"]
                 )
 
-                feat_outputs.append(decoder_states["feat_output"])
+                mel_outputs.append(decoder_states["mel_outputs"])
                 stop_outputs.append(decoder_states["stop_output"])
                 alignments.append(decoder_states["alignment"])
 
@@ -205,16 +205,16 @@ class Decoder(nn.Module):
                     context=decoder_states["context"]
                 )
 
-                feat_outputs.append(decoder_states["feat_output"])
+                mel_outputs.append(decoder_states["mel_output"])
                 stop_outputs.append(decoder_states["stop_output"])
                 alignments.append(decoder_states["alignment"])
 
                 if torch.sigmoid(decoder_states["stop_output"]).item() > self.stop_threshold:
                     break
 
-                input_var = decoder_states["feat_output"]
+                input_var = decoder_states["mel_output"]
 
-        return self.parse_decoder_outputs(feat_outputs, stop_outputs, alignments)
+        return self.parse_decoder_outputs(mel_outputs, stop_outputs, alignments)
 
     def validate_args(
             self,
