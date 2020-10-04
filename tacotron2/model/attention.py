@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from tacotron2.model.modules import Linear
-from typing import Tuple, Optional
+from typing import Tuple
 
 
 class LocationSensitiveAttention(nn.Module):

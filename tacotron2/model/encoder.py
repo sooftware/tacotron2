@@ -62,11 +62,7 @@ class Encoder(nn.Module):
         )
         self.device = device
 
-    def forward(
-            self,
-            inputs: Tensor,                             # B x T
-            input_lengths: Optional[Tensor] = None      # B,
-    ) -> Tensor:
+    def forward(self, inputs: Tensor, input_lengths: Optional[Tensor] = None) -> Tensor:
         inputs = self.embedding(inputs)
         inputs = inputs.transpose(1, 2)
 

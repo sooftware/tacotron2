@@ -36,6 +36,7 @@ class DefaultArgument:
         self.postnet_conv_kernel_size = 5
         self.postnet_dropout_p = 0.5
 
+
 batch_size = 3
 seq_length = 3
 

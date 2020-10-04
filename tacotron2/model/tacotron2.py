@@ -44,9 +44,15 @@ class Tacotron2(nn.Module):
             dropout_p=args.postnet_dropout_p
         )
 
-    def forward(self, inputs: Tensor, targets: Optional[Tensor] = None, input_lengths: Optional[Tensor] = None):
+    def forward(
+            self,
+            inputs: Tensor,
+            targets: Optional[Tensor] = None,
+            input_lengths: Optional[Tensor] = None,
+            teacher_forcing_ratio: float = 1.0
+    ):
         encoder_outputs = self.encoder(inputs, input_lengths)
-        decoder_outputs = self.decoder(encoder_outputs, targets)
+        decoder_outputs = self.decoder(encoder_outputs, targets, teacher_forcing_ratio)
 
         postnet_outputs = self.postnet(decoder_outputs["feat_outputs"])
         decoder_outputs["feat_outputs"] += postnet_outputs

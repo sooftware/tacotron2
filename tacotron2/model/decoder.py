@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from tacotron2.model.attention import LocationSensitiveAttention
 from tacotron2.model.modules import Linear
 from typing import Optional, Tuple, Dict, Any
+from tacotron2.model.attention import LocationSensitiveAttention
 
 
 class Decoder(nn.Module):
@@ -37,10 +37,10 @@ class Decoder(nn.Module):
     """
     def __init__(
             self,
-            num_mel_filters: int = 80,                       # number of mel filters
+            num_mel_filters: int = 80,              # number of mel filters
             prenet_dim: int = 256,                  # dimension of prenet
             decoder_lstm_dim: int = 1024,           # dimension of decoder lstm network
-            attn_lstm_dim: int = 1024,         # dimension of attention lstm network
+            attn_lstm_dim: int = 1024,              # dimension of attention lstm network
             embedding_dim: int = 512,               # dimension of embedding network
             attn_dim: int = 128,                    # dimension of attention layer
             location_conv_filter_size: int = 32,    # size of location convolution filter
@@ -112,12 +112,11 @@ class Decoder(nn.Module):
         return {
             "feat_outputs": feat_outputs,
             "stop_outputs": stop_outputs,
-            "alignment": alignment
+            "alignments": alignment
         }
 
     def forward_step(
-            self,
-            input_var: Tensor,
+            self, input_var: Tensor,
             encoder_outputs: Tensor,
             o_list: list,
             h_list: list,

@@ -46,3 +46,16 @@ class MultiDataLoader(object):
         """ Wait for the other threads """
         for idx in range(self.num_workers):
             self.loader[idx].join()
+
+
+def load_dataset(filepath: str, separator: str = '|'):
+    audio_paths = list()
+    transcripts = list()
+
+    with open(filepath) as f:
+        for line in f.readlines():
+            audio_path, transcript, _ = line.split(separator)
+            audio_paths.append(audio_path)
+            transcripts.append(transcript)
+
+    return audio_paths, transcripts
