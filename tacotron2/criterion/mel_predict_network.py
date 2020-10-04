@@ -7,9 +7,9 @@ import torch
 import torch.nn as nn
 
 
-class TextToSpeechCriterion(nn.Module):
+class MelPredictNetworkCriterion(nn.Module):
     def __init__(self):
-        super(TextToSpeechCriterion, self).__init__()
+        super(MelPredictNetworkCriterion, self).__init__()
 
     def forward(self, output, targets):
         with torch.no_grad():

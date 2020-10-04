@@ -5,48 +5,36 @@
 
 import torch
 import threading
-import librosa
-from text import text_to_sequence
+from torch.utils.data import Dataset
+from tacotron2.data.audio.parser import MelSpectrogramParser
+from tacotron2.data.text import text_to_sequence
 
 
-class TextMelDataset(object):
+class TextMelDataset(Dataset, MelSpectrogramParser):
     def __init__(
             self,
             dataset_path,
             audio_paths: list,
             transcripts: list,
-            sample_rate: int = 220500,
+            feature_extract_by: str,
+            sample_rate: int = 22050,
             num_mel_bins: int = 80,
             frame_length_ms: float = 50,
             frame_shift_ms: float = 12.5
     ):
+        super(TextMelDataset, self).__init__(feature_extract_by, sample_rate, num_mel_bins, frame_length_ms, frame_shift_ms)
         self.dataset_path = dataset_path
         self.audio_paths = audio_paths
         self.transcripts = transcripts
-        self.sample_rate = sample_rate
-        self.num_mel_bins = num_mel_bins
-        self.n_fft = int(round(sample_rate * 0.001 * frame_length_ms))
-        self.hop_length = int(round(sample_rate * 0.001 * frame_shift_ms))
 
-    def get_text(self, index):
-        return torch.IntTensor(text_to_sequence(self.transcripts[index], 'english_cleaner'))
-
-    def get_melspectrogram(self, index):
-        signal, sr = librosa.load(self.audio_paths[index], sr=self.sample_rate)
-        melspectrogram = librosa.feature.melspectrogram(
-            y=signal,
-            sr=sr,
-            n_fft=self.n_fft,
-            hop_length=self.hop_length,
-            window='hann'
-        )
-        return melspectrogram
+    def parse_text(self, text):
+        return torch.IntTensor(text_to_sequence(text, 'english_cleaner'))
 
     def get_item(self, index):
-        text = self.get_text(index)
-        melspectrogram = self.get_melspectrogram(index)
+        text = self.parse_text(self.transcripts[index])
+        mel_spectrogram = self.parse_audio(self.audio_paths[index])
 
-        return text, melspectrogram
+        return text, mel_spectrogram
 
 
 class TextMelDataLoader(threading.Thread):
@@ -90,6 +78,7 @@ class MultiDataLoader(object):
 
 def split_dataset(args):
     target_dict = load_targets(args.metadata_path, separator='|')
+    # TODO
 
 
 def load_targets(filepath: str, separator: str = '|'):

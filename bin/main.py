@@ -8,7 +8,7 @@ import random
 import argparse
 import warnings
 from torch import optim
-from tacotron2.criterion.tts_criterion import TextToSpeechCriterion
+from tacotron2.criterion.mel_predict_network import MelPredictNetworkCriterion
 from tacotron2.model.tacotron2 import Tacotron2
 from tacotron2.opts import build_model_opts, build_train_opts
 from tacotron2.trainer.supervised_trainer import SupervisedTrainer
@@ -27,7 +27,7 @@ def train(args):
     model = Tacotron2(args)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    criterion = TextToSpeechCriterion()
+    criterion = MelPredictNetworkCriterion()
 
     trainer = SupervisedTrainer()
     model = trainer.train()

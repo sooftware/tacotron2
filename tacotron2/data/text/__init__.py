@@ -1,7 +1,7 @@
 """ from https://github.com/keithito/tacotron """
 import re
-from text import cleaners
-from text.symbols import symbols
+from tacotron2.data.text import cleaners
+from tacotron2.data.text.symbols import symbols
 
 
 # Mappings from symbol to numeric ID and vice versa:
