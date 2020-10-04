@@ -17,7 +17,7 @@ class DefaultArgument:
         self.device = 'cuda'
 
         # decoder arguments
-        self.num_mel_filters = 80
+        self.num_mel_bins = 80
         self.prenet_dim = 256
         self.decoder_lstm_dim = 1024
         self.attn_lstm_dim = 1024

@@ -20,7 +20,7 @@ class PostNet(nn.Module):
     """
     def __init__(
             self,
-            num_mel_filters: int = 80,
+            num_mel_bins: int = 80,
             postnet_dim: int = 512,
             num_conv_layers: int = 3,
             kernel_size: int = 5,
@@ -32,7 +32,7 @@ class PostNet(nn.Module):
 
         self.conv_layers = nn.ModuleList()
         self.conv_layers.append(ConvBlock(
-            input_dim=num_mel_filters,
+            input_dim=num_mel_bins,
             output_dim=postnet_dim,
             kernel_size=kernel_size,
             padding=int((kernel_size - 1) / 2),
@@ -52,7 +52,7 @@ class PostNet(nn.Module):
 
         self.conv_layers.append(ConvBlock(
             input_dim=postnet_dim,
-            output_dim=num_mel_filters,
+            output_dim=num_mel_bins,
             kernel_size=kernel_size,
             padding=int((kernel_size - 1) / 2),
             dropout_p=dropout_p,

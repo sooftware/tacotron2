@@ -27,7 +27,7 @@ class Tacotron2(nn.Module):
             device=args.device
         )
         self.decoder = Decoder(
-            num_mel_filters=args.num_mel_filters,
+            num_mel_bins=args.num_mel_bins,
             prenet_dim=args.prenet_dim,
             decoder_lstm_dim=args.decoder_lstm_dim,
             attn_lstm_dim=args.attn_lstm_dim,
@@ -42,7 +42,7 @@ class Tacotron2(nn.Module):
             stop_threshold=args.stop_threshold
         )
         self.postnet = PostNet(
-            num_mel_filters=args.num_mel_filters,
+            num_mel_bins=args.num_mel_bins,
             postnet_dim=args.postnet_dim,
             num_conv_layers=args.num_postnet_conv_layers,
             kernel_size=args.postnet_conv_kernel_size,

@@ -38,7 +38,7 @@ def build_model_opts(parser: ArgumentParser):
                        help='size of character vocab')
 
     # decoder arguments
-    group.add_argument('--num_mel_filters', '-num_mel_filters',
+    group.add_argument('--num_mel_bins', '-num_mel_bins',
                        type=int, default=80,
                        help='number of mel filters')
     group.add_argument('--prenet_dim', '-prenet_dim',
@@ -92,4 +92,12 @@ def build_model_opts(parser: ArgumentParser):
 
 def build_train_opts(parser: ArgumentParser):
     group = parser.add_argument_group('Train')
-    pass
+    group.add_argument('--teacher_forcing_ratio', '-teacher_forcing_ratio',
+                       type=int, default=1.0,
+                       help='probability of teacher forcing (default: 1.0)')
+    group.add_argument('--lr', '-lr',
+                       type=int, default=1.0,
+                       help='learning rate for training')
+    group.add_argument('--weight_decay', '-weight_decay',
+                       type=int, default=1.0,
+                       help='weight decay for optimizer')

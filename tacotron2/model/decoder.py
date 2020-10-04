@@ -19,7 +19,7 @@ class Decoder(nn.Module):
     a mel spectrogram from the encoded input sequence one frame at a time.
 
     Args:
-        num_mel_filters: number of mel filters
+        num_mel_bins: number of mel filters
         prenet_dim: dimension of prenet
         decoder_lstm_dim: dimension of decoder lstm network
         attn_lstm_dim: dimension of attention lstm network
@@ -42,7 +42,7 @@ class Decoder(nn.Module):
     """
     def __init__(
             self,
-            num_mel_filters: int = 80,              # number of mel filters
+            num_mel_bins: int = 80,              # number of mel filters
             prenet_dim: int = 256,                  # dimension of prenet
             decoder_lstm_dim: int = 1024,           # dimension of decoder lstm network
             attn_lstm_dim: int = 1024,              # dimension of attention lstm network
@@ -57,7 +57,7 @@ class Decoder(nn.Module):
             stop_threshold: float = 0.5             # stop threshold
     ) -> None:
         super(Decoder, self).__init__()
-        self.num_mel_filters = num_mel_filters
+        self.num_mel_bins = num_mel_bins
         self.max_decoding_step = max_decoding_step
         self.decoder_lstm_dim = decoder_lstm_dim
         self.attn_lstm_dim = attn_lstm_dim
@@ -66,7 +66,7 @@ class Decoder(nn.Module):
         self.decoder_dropout_p = decoder_dropout_p
         self.stop_threshold = stop_threshold
 
-        self.prenet = PreNet(self.num_mel_filters, prenet_dim, prenet_dropout_p)
+        self.prenet = PreNet(self.num_mel_bins, prenet_dim, prenet_dropout_p)
         self.lstm = nn.ModuleList([
             nn.LSTMCell(prenet_dim + embedding_dim, attn_lstm_dim, bias=True),
             nn.LSTMCell(attn_lstm_dim + embedding_dim, decoder_lstm_dim, bias=True)
@@ -78,7 +78,7 @@ class Decoder(nn.Module):
             location_conv_filter_size=location_conv_filter_size,
             location_conv_kernel_size=location_conv_kernel_size
         )
-        self.feat_generator = Linear(decoder_lstm_dim + embedding_dim, num_mel_filters)
+        self.feat_generator = Linear(decoder_lstm_dim + embedding_dim, num_mel_bins)
         self.stop_generator = Linear(decoder_lstm_dim + embedding_dim, 1)
 
     def _init_decoder_states(self, encoder_outputs: Tensor) -> Dict[str, Any]:
@@ -111,7 +111,7 @@ class Decoder(nn.Module):
         alignment = torch.stack(alignment).transpose(0, 1)
 
         feat_outputs = torch.stack(feat_outputs).transpose(0, 1).contiguous()
-        feat_outputs = feat_outputs.view(feat_outputs.size(0), -1, self.num_mel_filters)
+        feat_outputs = feat_outputs.view(feat_outputs.size(0), -1, self.num_mel_bins)
         feat_outputs = feat_outputs.transpose(1, 2)
 
         return {
@@ -227,14 +227,14 @@ class Decoder(nn.Module):
         batch_size = encoder_outputs.size(0)
 
         if input is None:  # inference
-            inputs = encoder_outputs.new_zeros(batch_size, self.num_mel_filters)
+            inputs = encoder_outputs.new_zeros(batch_size, self.num_mel_bins)
             max_decoding_step = self.max_decoding_step
 
             if teacher_forcing_ratio > 0:
                 raise ValueError("Teacher forcing has to be disabled (set 0) when no inputs is provided.")
 
         else:  # training
-            go_frame = encoder_outputs.new_zeros(batch_size, self.num_mel_filters).unsqueeze(1)
+            go_frame = encoder_outputs.new_zeros(batch_size, self.num_mel_bins).unsqueeze(1)
             inputs = inputs.view(batch_size, int(inputs.size(1)), -1)
 
             inputs = torch.cat((go_frame, inputs), dim=1)
