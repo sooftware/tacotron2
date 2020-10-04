@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# Soohwan Kim @sooftware
+# This source code is licensed under the Apache 2.0 License license found in the
+# LICENSE file in the root directory of this source tree
+
 import threading
 
 
@@ -10,7 +15,7 @@ class TextMelDataset(object):
 
 
 class TextMelDataLoader(threading.Thread):
-    def __init__(self, dataset, queue, batch_size, thread_id):
+    def __init__(self, dataset: TextMelDataset, queue, batch_size, thread_id):
         super(TextMelDataLoader, self).__init__()
 
     def run(self):
