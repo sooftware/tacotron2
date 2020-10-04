@@ -6,6 +6,7 @@ batch_size = 3
 seq_length = 3
 
 encoder = Encoder(vocab_size=10)
+print(encoder)
 
 inputs = torch.LongTensor(np.arange(batch_size * seq_length).reshape(batch_size, seq_length))
 input_lengths = torch.LongTensor([3, 3, 2])

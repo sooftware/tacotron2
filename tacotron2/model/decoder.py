@@ -1,10 +1,11 @@
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from tacotron2.model.attention import LocationSensitiveAttention
-from tacotron2.model.sublayers import Linear, PreNet
-from typing import Optional, Dict
+from tacotron2.model.modules import Linear
+from typing import Optional, Tuple, Dict, Any
 
 
 class Decoder(nn.Module):
@@ -13,11 +14,10 @@ class Decoder(nn.Module):
     a mel spectrogram from the encoded input sequence one frame at a time.
 
     Args:
-        n_mels: number of mel filters
-        n_frames_per_step: number of frames per step. currently support just 1
+        num_mel_filters: number of mel filters
         prenet_dim: dimension of prenet
         decoder_lstm_dim: dimension of decoder lstm network
-        attention_lstm_dim: dimension of attention lstm network
+        attn_lstm_dim: dimension of attention lstm network
         embedding_dim: dimension of embedding network
         attn_dim: dimension of attention layer
         location_conv_filter_size: size of location convolution filter
@@ -25,7 +25,7 @@ class Decoder(nn.Module):
         prenet_dropout_p: dropout probability of prenet
         attn_dropout_p: dropout probability of attention network
         decoder_dropout_p: dropout probability of decoder network
-        max_length: max length when inference
+        max_decoding_step: max decoding step
         stop_threshold: stop threshold
 
     Inputs:
@@ -33,182 +33,224 @@ class Decoder(nn.Module):
         - **inputs**: target mel-spectrogram for training
 
     Returns:
-        - **output**: dictionary contains feat_outputs, stop_outputs, alignment_energies
+        - **output**: dictionary contains feat_outputs, stop_outputs, alignments
     """
     def __init__(
             self,
-            n_mels: int = 80,
-            n_frames_per_step: int = 1,
-            prenet_dim: int = 256,
-            decoder_lstm_dim: int = 1024,
-            attention_lstm_dim: int = 1024,
-            embedding_dim: int = 512,
-            attn_dim: int = 128,
-            location_conv_filter_size: int = 32,
-            location_conv_kernel_size: int = 31,
-            prenet_dropout_p: float = 0.5,
-            attn_dropout_p: float = 0.1,
-            decoder_dropout_p: float = 0.1,
-            max_length: int = 1000,
-            stop_threshold: float = 0.5
-    ):
+            num_mel_filters: int = 80,                       # number of mel filters
+            prenet_dim: int = 256,                  # dimension of prenet
+            decoder_lstm_dim: int = 1024,           # dimension of decoder lstm network
+            attn_lstm_dim: int = 1024,         # dimension of attention lstm network
+            embedding_dim: int = 512,               # dimension of embedding network
+            attn_dim: int = 128,                    # dimension of attention layer
+            location_conv_filter_size: int = 32,    # size of location convolution filter
+            location_conv_kernel_size: int = 31,    # size of location convolution kernel
+            prenet_dropout_p: float = 0.5,          # dropout probability of prenet
+            attn_dropout_p: float = 0.1,            # dropout probability of attention network
+            decoder_dropout_p: float = 0.1,         # dropout probability of decoder network
+            max_decoding_step: int = 1000,          # max decoding step
+            stop_threshold: float = 0.5             # stop threshold
+    ) -> None:
         super(Decoder, self).__init__()
-        self.n_mels = n_mels
-        self.n_frames_per_step = n_frames_per_step
-        self.max_length = max_length
+        self.num_mel_filters = num_mel_filters
+        self.max_decoding_step = max_decoding_step
         self.decoder_lstm_dim = decoder_lstm_dim
-        self.attention_lstm_dim = attention_lstm_dim
+        self.attn_lstm_dim = attn_lstm_dim
         self.embedding_dim = embedding_dim
         self.attn_dropout_p = attn_dropout_p
         self.decoder_dropout_p = decoder_dropout_p
         self.stop_threshold = stop_threshold
 
-        self.context_vector = None
-        self.attention_output = None
-        self.attention_hidden = None
-        self.alignment_energy = None
-        self.alignment_energy_cum = None
-        self.decoder_output = None
-        self.decoder_hidden = None
-
-        self.prenet = PreNet(self.n_mels * self.n_frames_per_step, prenet_dim, prenet_dropout_p)
-        self.attention_lstm = nn.LSTMCell(
-            input_size=prenet_dim + embedding_dim,
-            hidden_size=attention_lstm_dim,
-            bias=True
-        )
-        self.decoder_lstm = nn.LSTMCell(
-            input_size=attention_lstm_dim + embedding_dim,
-            hidden_size=decoder_lstm_dim,
-            bias=True
-        )
+        self.prenet = PreNet(self.num_mel_filters, prenet_dim, prenet_dropout_p)
+        self.lstm = nn.ModuleList([
+            nn.LSTMCell(prenet_dim + embedding_dim, attn_lstm_dim, bias=True),
+            nn.LSTMCell(attn_lstm_dim + embedding_dim, decoder_lstm_dim, bias=True)
+        ])
         self.attention = LocationSensitiveAttention(
-            decoder_lstm_dim, embedding_dim, attn_dim, location_conv_filter_size, location_conv_kernel_size
+            lstm_hidden_dim=decoder_lstm_dim,
+            embedding_dim=embedding_dim,
+            attn_dim=attn_dim,
+            location_conv_filter_size=location_conv_filter_size,
+            location_conv_kernel_size=location_conv_kernel_size
         )
-        self.feat_linear_projection = Linear(decoder_lstm_dim + embedding_dim, n_mels * n_frames_per_step)
-        self.stop_linear_projection = Linear(decoder_lstm_dim + embedding_dim, 1)
+        self.feat_generator = Linear(decoder_lstm_dim + embedding_dim, num_mel_filters)
+        self.stop_generator = Linear(decoder_lstm_dim + embedding_dim, 1)
 
-    def _init_decoder_states(self, encoder_outputs):
+    def _init_decoder_states(self, encoder_outputs: Tensor) -> Dict[str, Any]:
+        o_list = list()
+        h_list = list()
+
         batch_size = encoder_outputs.size(0)
         seq_length = encoder_outputs.size(1)
 
-        self.attention_output = encoder_outputs.new_zeros(batch_size, self.attention_lstm_dim)
-        self.attention_hidden = encoder_outputs.new_zeros(batch_size, self.attention_lstm_dim)
-        self.decoder_output = encoder_outputs.new_zeros(batch_size, self.decoder_lstm_dim)
-        self.decoder_hidden = encoder_outputs.new_zeros(batch_size, self.decoder_lstm_dim)
+        o_list.append(encoder_outputs.new_zeros(batch_size, self.attn_lstm_dim))
+        o_list.append(encoder_outputs.new_zeros(batch_size, self.decoder_lstm_dim))
 
-        self.alignment_energy = encoder_outputs.new_zeros(batch_size, seq_length)
-        self.alignment_energy_cum = encoder_outputs.new_zeros(batch_size, seq_length)
-        self.context_vector = encoder_outputs.new_zeros(batch_size, self.embedding_dim)
+        h_list.append(encoder_outputs.new_zeros(batch_size, self.attn_lstm_dim))
+        h_list.append(encoder_outputs.new_zeros(batch_size, self.decoder_lstm_dim))
 
-    def parse_decoder_outputs(self, feat_outputs, stop_outputs, alignment_energies):
+        alignment = encoder_outputs.new_zeros(batch_size, seq_length)
+        alignment_cum = encoder_outputs.new_zeros(batch_size, seq_length)
+        context = encoder_outputs.new_zeros(batch_size, self.embedding_dim)
+
+        return {
+            "o_list": o_list,
+            "h_list": h_list,
+            "alignment": alignment,
+            "alignment_cum": alignment_cum,
+            "context": context
+        }
+
+    def parse_decoder_outputs(self, feat_outputs: list, stop_outputs: list, alignment: list) -> Dict[str, Tensor]:
         stop_outputs = torch.stack(stop_outputs).transpose(0, 1).contiguous()
-        alignment_energies = torch.stack(alignment_energies).transpose(0, 1)
+        alignment = torch.stack(alignment).transpose(0, 1)
 
         feat_outputs = torch.stack(feat_outputs).transpose(0, 1).contiguous()
-        feat_outputs = feat_outputs.view(feat_outputs.size(0), -1, self.n_mels)
+        feat_outputs = feat_outputs.view(feat_outputs.size(0), -1, self.num_mel_filters)
         feat_outputs = feat_outputs.transpose(1, 2)
 
         return {
             "feat_outputs": feat_outputs,
             "stop_outputs": stop_outputs,
-            "alignment_energies": alignment_energies
+            "alignment": alignment
         }
 
-    def forward_step(self, input_var: Tensor, encoder_outputs: Tensor):
-        input_var = torch.cat((input_var.squeeze(1), self.context_vector), dim=-1)
+    def forward_step(
+            self,
+            input_var: Tensor,
+            encoder_outputs: Tensor,
+            o_list: list,
+            h_list: list,
+            alignment: Tensor,
+            alignment_cum: Tensor,
+            context: Tensor
+    ) -> Dict[str, Any]:
+        input_var = input_var.squeeze(1)
+        input_var = torch.cat((input_var, context), dim=-1)
 
-        self.attention_output, self.attention_hidden = self.attention_lstm(
-            input_var, (self.attention_output, self.attention_hidden)
-        )
-        self.attention_output = F.dropout(self.attention_output, self.attn_dropout_p)
+        o_list[0], h_list[0] = self.lstm[0](input_var, (o_list[0], h_list[0]))
+        o_list[0] = F.dropout(o_list[0], self.attn_dropout_p)
 
-        concated_alignment_energy = torch.cat(
-            (self.alignment_energy.unsqueeze(1), self.alignment_energy_cum.unsqueeze(1)), dim=1
-        )
-        self.context_vector, self.alignment_energy = self.attention(
-            self.attention_output, encoder_outputs, concated_alignment_energy
-        )
-        self.alignment_energy_cum += self.alignment_energy
+        concated_alignment = torch.cat((alignment.unsqueeze(1), alignment_cum.unsqueeze(1)), dim=1)
+        context, alignment = self.attention(o_list[0], encoder_outputs, concated_alignment)
+        alignment_cum += alignment
 
-        input_var = torch.cat((self.attention_output, self.context_vector), dim=-1)
+        input_var = torch.cat((o_list[0], context), dim=-1)
 
-        self.decoder_output, self.decoder_hidden = self.decoder_lstm(input_var, (self.decoder_output, self.decoder_hidden))
-        self.decoder_output = F.dropout(self.decoder_output, p=self.decoder_dropout_p)
+        o_list[1], h_list[1] = self.lstm[1](input_var, (o_list[1], h_list[1]))
+        o_list[1] = F.dropout(o_list[1], p=self.decoder_dropout_p)
 
-        output = torch.cat((self.decoder_hidden, self.context_vector), dim=-1)
+        output = torch.cat((h_list[1], context), dim=-1)
 
-        feat_output = self.feat_linear_projection(output)
-        stop_output = self.stop_linear_projection(output)
+        feat_output = self.feat_generator(output)
+        stop_output = self.stop_generator(output)
 
-        return feat_output, stop_output, self.alignment_energy
+        return {
+            "feat_output": feat_output,
+            "stop_output": stop_output,
+            "alignment": alignment,
+            "alignment_cum": alignment_cum,
+            "context": context,
+            "o_list": o_list,
+            "h_list": h_list
+        }
 
     def forward(
             self,
             encoder_outputs: Tensor,
-            inputs: Optional[Tensor] = None
-    ):
-        """
-        Args:
-            inputs: (batch, seq_length, n_mels)
-            encoder_outputs: encoder outputs
-        """
-        feat_outputs = list()
-        stop_outputs = list()
-        alignment_energies = list()
+            inputs: Optional[Tensor] = None,
+            teacher_forcing_ratio: float = 1.0
+    ) -> Dict[str, Tensor]:
+        feat_outputs, stop_outputs, alignments = list(), list(), list()
+        use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
 
-        inputs, max_length, train = self.validate_args(inputs, encoder_outputs)
-        self._init_decoder_states(encoder_outputs)
+        inputs, max_decoding_step = self.validate_args(encoder_outputs, inputs, teacher_forcing_ratio)
+        decoder_states = self._init_decoder_states(encoder_outputs)
 
-        if train:
-            inputs = self.prenet(inputs)  # B x T x 256
+        if use_teacher_forcing:
+            inputs = self.prenet(inputs)
 
-            for di in range(max_length):
-                feat_output, stop_output, alignment_energy = self.forward_step(inputs[:, di, :].unsqueeze(1), encoder_outputs)
-                feat_outputs.append(feat_output)
-                stop_outputs.append(stop_output)
-                alignment_energies.append(alignment_energy)
+            for di in range(max_decoding_step):
+                input_var = inputs[:, di, :].unsqueeze(1)
+                decoder_states = self.forward_step(
+                    input_var=input_var,
+                    encoder_outputs=encoder_outputs,
+                    o_list=decoder_states["o_list"],
+                    h_list=decoder_states["h_list"],
+                    alignment=decoder_states["alignment"],
+                    alignment_cum=decoder_states["alignment_cum"],
+                    context=decoder_states["context"]
+                )
+
+                feat_outputs.append(decoder_states["feat_output"])
+                stop_outputs.append(decoder_states["stop_output"])
+                alignments.append(decoder_states["alignment"])
 
         else:
             input_var = inputs
 
-            for di in range(max_length):
+            for di in range(max_decoding_step):
                 input_var = self.prenet(input_var)
-                feat_output, stop_output, alignment_energy = self.forward_step(input_var, encoder_outputs)
-                feat_outputs.append(feat_output)
-                stop_outputs.append(stop_output)
-                alignment_energies.append(alignment_energy)
+                decoder_states = self.forward_step(
+                    input_var=input_var,
+                    encoder_outputs=encoder_outputs,
+                    o_list=decoder_states["o_list"],
+                    h_list=decoder_states["h_list"],
+                    alignment=decoder_states["alignment"],
+                    alignment_cum=decoder_states["alignment_cum"],
+                    context=decoder_states["context"]
+                )
 
-                if torch.sigmoid(stop_output.item()) > self.stop_threshold:
+                feat_outputs.append(decoder_states["feat_output"])
+                stop_outputs.append(decoder_states["stop_output"])
+                alignments.append(decoder_states["alignment"])
+
+                if torch.sigmoid(decoder_states["stop_output"]).item() > self.stop_threshold:
                     break
 
-                input_var = feat_output
+                input_var = decoder_states["feat_output"]
 
-        output = self.parse_decoder_outputs(feat_outputs, stop_outputs, alignment_energies)
-
-        return output
+        return self.parse_decoder_outputs(feat_outputs, stop_outputs, alignments)
 
     def validate_args(
             self,
-            inputs: Optional[Tensor] = None,
-            encoder_outputs: Tensor = None
-    ):
+            encoder_outputs: Tensor,
+            inputs: Optional[Any] = None,
+            teacher_forcing_ratio: float = 1.0
+    ) -> Tuple[Optional[Any], int]:
         assert encoder_outputs is not None
 
         batch_size = encoder_outputs.size(0)
 
         if input is None:  # inference
-            inputs = encoder_outputs.new_zeros(batch_size, self.n_mels * self.n_frames_per_step)
-            max_length = self.max_length
-            train = False
+            inputs = encoder_outputs.new_zeros(batch_size, self.num_mel_filters)
+            max_decoding_step = self.max_decoding_step
+
+            if teacher_forcing_ratio > 0:
+                raise ValueError("Teacher forcing has to be disabled (set 0) when no inputs is provided.")
 
         else:  # training
-            go_frame = encoder_outputs.new_zeros(batch_size, self.n_mels * self.n_frames_per_step).unsqueeze(1)
-            inputs = inputs.view(batch_size, int(inputs.size(1) / self.n_frames_per_step), -1)
+            go_frame = encoder_outputs.new_zeros(batch_size, self.num_mel_filters).unsqueeze(1)
+            inputs = inputs.view(batch_size, int(inputs.size(1)), -1)
 
             inputs = torch.cat((go_frame, inputs), dim=1)
-            train = True
 
-            max_length = inputs.size(1) - 1
+            max_decoding_step = inputs.size(1) - 1
 
-        return inputs, max_length, train
+        return inputs, max_decoding_step
+
+
+class PreNet(nn.Module):
+    def __init__(self, input_dim: int, output_dim: int, dropout_p: float) -> None:
+        super(PreNet, self).__init__()
+        self.fully_connected_layers = nn.Sequential(
+            Linear(input_dim, output_dim),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_p),
+            Linear(output_dim, output_dim),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_p)
+        )
+
+    def forward(self, inputs: Tensor) -> Tensor:
+        return self.fully_connected_layers(inputs)

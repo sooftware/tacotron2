@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from tacotron2.model.sublayers import Linear
+from tacotron2.model.modules import Linear
 from typing import Tuple, Optional
 
 
@@ -12,7 +12,7 @@ class LocationSensitiveAttention(nn.Module):
     mitigating potential failure modes where some subsequences are repeated or ignored by the decoder.
 
     Args:
-        rnn_hidden_dim: dimension of rnn hidden state vector (default: 1024)
+        lstm_hidden_dim: dimension of rnn hidden state vector (default: 1024)
         embedding_dim: dimension of character embedding layer (default: 512)
         attn_dim: dimension of attention (default: 128)
         location_conv_filter_size: size of location convolution layer`s filter (default: 32)
@@ -29,15 +29,15 @@ class LocationSensitiveAttention(nn.Module):
     """
     def __init__(
             self,
-            rnn_hidden_dim: int = 1024,             # dimension of rnn hidden state vector
-            embedding_dim: int = 512,               # dimension of character embedding layer
-            attn_dim: int = 128,                    # dimension of attention
-            location_conv_filter_size: int = 32,    # size of location convolution layer`s filter
-            location_conv_kernel_size: int = 31     # size of location convolution layer`s kernel
+            lstm_hidden_dim: int = 1024,             # dimension of rnn hidden state vector
+            embedding_dim: int = 512,                # dimension of character embedding layer
+            attn_dim: int = 128,                     # dimension of attention
+            location_conv_filter_size: int = 32,     # size of location convolution layer`s filter
+            location_conv_kernel_size: int = 31      # size of location convolution layer`s kernel
     ) -> None:
         super(LocationSensitiveAttention, self).__init__()
         self.attn_dim = attn_dim
-        self.query_proj = Linear(rnn_hidden_dim, attn_dim, bias=False)
+        self.query_proj = Linear(lstm_hidden_dim, attn_dim, bias=False)
         self.value_proj = Linear(embedding_dim, attn_dim, bias=False)
         self.align_proj = Linear(attn_dim, 1, bias=True)
         self.bias = nn.Parameter(torch.rand(attn_dim).uniform_(-0.1, 0.1))
@@ -51,39 +51,23 @@ class LocationSensitiveAttention(nn.Module):
         )
         self.location_proj = Linear(location_conv_filter_size, attn_dim, bias=False)
 
-    def forward(
-            self,
-            query: Tensor,
-            value: Tensor,
-            last_alignment_energy: Tensor
-    ) -> Tuple[Tensor, Tensor]:
-        alignment_energy = self.get_alignment_energy(query, value, last_alignment_energy)
-        alignment_energy = F.softmax(alignment_energy, dim=-1)
-
-        context_vector = torch.bmm(alignment_energy.unsqueeze(1), value)
-        context_vector = context_vector.squeeze(1)
-
-        return context_vector, alignment_energy
-
-    def get_alignment_energy(
-            self,
-            query: Tensor,
-            value: Tensor,
-            last_alignment_energy: Tensor
-    ) -> Tensor:
+    def forward(self, query: Tensor, value: Tensor, last_alignment: Tensor) -> Tuple[Tensor, Tensor]:
         batch_size = query.size(0)
         query = query.unsqueeze(1)
 
-        last_alignment_energy = self.location_conv(last_alignment_energy)
-        last_alignment_energy = last_alignment_energy.transpose(1, 2)
-        last_alignment_energy = self.location_proj(last_alignment_energy)
+        last_alignment = self.location_conv(last_alignment)
+        last_alignment = last_alignment.transpose(1, 2)
+        last_alignment = self.location_proj(last_alignment)
 
-        alignment_energy = self.align_proj(torch.tanh(
+        alignment = self.align_proj(torch.tanh(
             self.query_proj(query.reshape(-1, query.size(2))).view(batch_size, -1, self.attn_dim)
             + self.value_proj(value.reshape(-1, value.size(2))).view(batch_size, -1, self.attn_dim)
-            + last_alignment_energy
+            + last_alignment
             + self.bias
         )).squeeze(-1)
+        alignment = F.softmax(alignment, dim=-1)
 
-        return alignment_energy
+        context = torch.bmm(alignment.unsqueeze(1), value)
+        context = context.squeeze(1)
 
+        return context, alignment

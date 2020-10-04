@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torch import Tensor
 from typing import Optional
-from tacotron2.model.sublayers import ConvBlock
+from tacotron2.model.modules import ConvBlock
 
 
 class Encoder(nn.Module):
@@ -43,7 +43,7 @@ class Encoder(nn.Module):
     ) -> None:
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.conv = nn.Sequential(*[
+        self. conv_layers= nn.Sequential(*[
             ConvBlock(
                 embedding_dim,
                 embedding_dim,
@@ -68,6 +68,10 @@ class Encoder(nn.Module):
             input_lengths: Optional[Tensor] = None      # B,
     ) -> Tensor:
         inputs = self.embedding(inputs)
+        inputs = inputs.transpose(1, 2)
+
+        inputs = self.conv_layers(inputs)
+        inputs = inputs.transpose(1, 2)
 
         if input_lengths is not None:
             output = nn.utils.rnn.pack_padded_sequence(inputs, input_lengths, batch_first=True)
