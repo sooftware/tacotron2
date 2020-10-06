@@ -9,9 +9,9 @@ import argparse
 import warnings
 from torch import optim
 from tacotron2.criterion.mel_predict_network import MelPredictNetworkCriterion
-from tacotron2.data.data_loader import split_dataset
+from tacotron2.data.label_loader import split_dataset
 from tacotron2.model.tacotron2 import Tacotron2
-from tacotron2.opts import build_model_opts, build_train_opts
+from tacotron2.opts import build_model_opts, build_train_opts, build_preprocess_opts
 from tacotron2.trainer.supervised_trainer import SupervisedTrainer
 from tacotron2.utils import check_envirionment
 
@@ -38,6 +38,7 @@ def _get_parser():
     parser = argparse.ArgumentParser(description='Tacotron2')
     parser.add_argument('--mode', type=str, default='train')
 
+    build_preprocess_opts(parser)
     build_model_opts(parser)
     build_train_opts(parser)
 

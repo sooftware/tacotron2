@@ -6,6 +6,10 @@
 from argparse import ArgumentParser
 
 
+def build_preprocess_opts(parser: ArgumentParser):
+    pass
+
+
 def build_model_opts(parser: ArgumentParser):
     # encoder arguments
     group = parser.add_argument_group('Model')

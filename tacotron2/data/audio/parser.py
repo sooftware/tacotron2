@@ -62,8 +62,8 @@ class MelSpectrogramParser(AudioParser):
             mel_spectrogram = self.amplitude_to_db(mel_spectrogram)
 
         elif self.feature_extract_by == 'librosa':
-            mel_spectrogram = self.transforms(y=signal, sr=self.sample_rate, n_mels=self.num_mel_bins,
-                                             n_fft=self.n_fft, hop_length=self.hop_length)
+            mel_spectrogram = librosa.feature.melspectrogram(y=signal, sr=self.sample_rate, n_mels=self.num_mel_bins,
+                                                             n_fft=self.n_fft, hop_length=self.hop_length)
             mel_spectrogram = self.amplitude_to_db(mel_spectrogram, ref=np.max)
 
         else:
