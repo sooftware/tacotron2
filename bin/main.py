@@ -9,6 +9,7 @@ import argparse
 import warnings
 from torch import optim
 from tacotron2.criterion.mel_predict_network import MelPredictNetworkCriterion
+from tacotron2.data.data_loader import split_dataset
 from tacotron2.model.tacotron2 import Tacotron2
 from tacotron2.opts import build_model_opts, build_train_opts
 from tacotron2.trainer.supervised_trainer import SupervisedTrainer
@@ -16,14 +17,12 @@ from tacotron2.utils import check_envirionment
 
 
 def train(args):
-    SEED = 1011
-
-    random.seed(SEED)
-    torch.manual_seed(SEED)
-    torch.cuda.manual_seed_all(SEED)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     device = check_envirionment(args.use_cuda)
 
-    # epoch_time_step, trainset_list, validset = split_dataset()
+    epoch_time_step, trainset_list, validset = split_dataset(args)
     model = Tacotron2(args)
 
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
