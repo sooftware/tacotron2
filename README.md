@@ -1,7 +1,7 @@
-# Tacotron2
+# Tacotron2-pytorch
   
 Pytorch implementation of [Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions](https://arxiv.org/abs/1712.05884)    
-**It is currently being implemented**
+
   
 <img src="https://user-images.githubusercontent.com/42150335/94840259-1cfbe900-0453-11eb-8803-cac2ea30b425.png" width=500>
   
@@ -16,8 +16,8 @@ pip install -e .
   
 ## Reference
   
-[NVIDIA/tacotron2](https://github.com/NVIDIA/tacotron2)  
-[Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions](https://arxiv.org/abs/1712.05884)  
+- [Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions](https://arxiv.org/abs/1712.05884)
+- [NVIDIA/tacotron2](https://github.com/NVIDIA/tacotron2)    
   
 ## Author
   

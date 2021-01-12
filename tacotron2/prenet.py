@@ -12,23 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
-import numpy as np
-from tacotron2.encoder import Encoder
+import torch.nn as nn
+from torch import Tensor
+from tacotron2.modules import Linear
 
-batch_size = 3
-seq_length = 3
 
-encoder = Encoder(vocab_size=10)
-print(encoder)
+class PreNet(nn.Module):
+    def __init__(self, input_dim: int, output_dim: int, dropout_p: float) -> None:
+        super(PreNet, self).__init__()
+        self.fully_connected_layers = nn.Sequential(
+            Linear(input_dim, output_dim),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_p),
+            Linear(output_dim, output_dim),
+            nn.ReLU(),
+            nn.Dropout(p=dropout_p)
+        )
 
-inputs = torch.LongTensor(np.arange(batch_size * seq_length).reshape(batch_size, seq_length))
-input_lengths = torch.LongTensor([3, 3, 2])
-
-output = encoder(inputs, input_lengths)
-print("input_lengths is not None ==")
-print(output)
-
-output = encoder(inputs)
-print("\ninput_lengths is None ==")
-print(output)
+    def forward(self, inputs: Tensor) -> Tensor:
+        return self.fully_connected_layers(inputs)

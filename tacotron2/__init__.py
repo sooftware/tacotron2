@@ -1,0 +1,1 @@
+from tacotron2.model import Tacotron2
