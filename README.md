@@ -1,4 +1,4 @@
-# tacotron2-pytorch
+# Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions
  
 Pytorch implementation of [Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions](https://arxiv.org/abs/1712.05884)    
 
